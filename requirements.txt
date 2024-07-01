@@ -1,0 +1,7 @@
+html2text
+beautifulsoup4
+trafilatura
+httpx
+bleach
+python-fasthtml
+
