@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=42", "wheel", "setuptools_scm[toml]>=3.4"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "web2md"
+dynamic = ["version", "dependencies"]
+description = "Convert a web page to markdown"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [ { name = "Jeremy Howard", email = "info@fast.ai" } ]
+requires-python = ">=3.7, <4"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/AnswerDotAI/web2md"
+
+[ tool.setuptools.dynamic ]
+dependencies = {file = ["requirements.txt"]}
+
+[ tool.setuptools_scm ]
+

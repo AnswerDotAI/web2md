@@ -2,10 +2,10 @@ from fasthtml.common import *
 from fasthtml.js import HighlightJS
 from html2text import HTML2Text
 from textwrap import dedent
-from bs4 import BeautifulSoup
 from json import dumps,loads
 from trafilatura import html2txt, extract
-import httpx, bleach
+from lxml.html.clean import Cleaner
+import httpx, lxml
 
 cdn = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.1'
 hdrs = (
@@ -42,7 +42,7 @@ def get():
             Input(type='text', id='url', placeholder='url'),
             Select(Option("html2text", value="h2t", selected=True),
                 Option("trafilatura", value="traf"),
-                id="extractor"),
+                id="extractor", hx_on_change="htmx.trigger('#editor', 'change')"),
         Button('Load')),
         Hidden(id='hid_code', hx_on__after_swap='console.log(this); upd_editor(this)'),
         hx_post='/load', hx_target='#hid_code', hx_swap='textContent')
@@ -54,22 +54,9 @@ def get():
 
 @rt('/load')
 def post(url:str):
-    soup = BeautifulSoup(httpx.get(url).text, 'html.parser')
-    body = soup.find('body').decode_contents()
-    tags = [
-        'a', 'abbr', 'acronym', 'address', 'area', 'article', 'aside', 'audio', 'b', 'bdi', 'bdo', 'big', 
-        'blockquote', 'br', 'caption', 'cite', 'code', 'col', 'colgroup', 'data', 'datalist', 'dd', 'del', 
-        'details', 'dfn', 'div', 'dl', 'dt', 'em', 'figcaption', 'figure', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 
-        'header', 'hr', 'i', 'img', 'ins', 'kbd', 'li', 'main', 'mark', 'nav', 'ol', 'p', 'pre', 'q', 'rp', 'rt', 
-        'ruby', 's', 'samp', 'section', 'small', 'span', 'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 
-        'th', 'thead', 'time', 'tr', 'u', 'ul', 'var', 'wbr'
-    ]
-    attr = {
-        '*': ['class', 'id', 'style', 'title', 'role', 'data-*', 'aria-*', 'src', 'alt', 'href', 'target', 'rel',
-              'width', 'height', 'type', 'name', 'value', 'placeholder', 'disabled', 'readonly', 'required', 'checked', 
-              'selected', 'max', 'min', 'step', 'maxlength', 'pattern', 'for', 'rows', 'cols', 'colspan', 'rowspan', 
-              'controls', 'loop', 'muted', 'autoplay', 'poster']}
-    return bleach.clean(body, tags=tags, attributes=attr, strip=True).strip()
+    body = lxml.html.fromstring(httpx.get(url).text).xpath('//body')[0]
+    body = Cleaner(javascript=True, style=True).clean_html(body)
+    return ''.join(lxml.html.tostring(c, encoding='unicode') for c in body)
 
 @rt('/')
 def post(editor: str, extractor:str):
