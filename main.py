@@ -61,6 +61,8 @@ def post(url:str):
 @rt('/')
 def post(editor: str, extractor:str):
     if extractor=='traf':
+        if '<article>' not in editor.lower(): editor = f'<article>{editor}</article>'
+        editor = f'<html><body>{editor}</body></html>'
         res = extract(editor, output_format='markdown', favor_recall=True, include_tables=True,
                       include_links=False, include_images=False, include_comments=True)
     else:
