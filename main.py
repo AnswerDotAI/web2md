@@ -25,15 +25,20 @@ hdrs = (
 app = fast_app(hdrs=hdrs)
 rt = app.route
 
-js = '''window.cm = CodeMirror.fromTextArea(document.getElementById("editor"), {
-    mode: "htmlmixed", foldGutter: true, gutters: ["CodeMirror-foldgutter"], viewportMargin: Infinity
-});
-cm.on("change", o => {
-    o.save();
-    o.getTextArea().dispatchEvent(new Event('change'));
-});
-function upd_editor(e) { cm.setValue(e.textContent); }
-'''
+setup_toasts(app)
+
+js = '''
+let cm = CodeMirror(me("#editor"), {
+    mode: "htmlmixed", foldGutter: true, gutters: ["CodeMirror-foldgutter"]
+})
+function upd_editor() {
+    htmx.ajax('POST', '/', {
+        target:'#details', values: {editor: cm.getValue(), extractor: me("#extractor").value}
+    });
+}
+cm.on("change", upd_editor);'''
+
+def set_cm(s): return Script(f"cm.setValue({dumps(s)});", id='set_cm', hx_swap_oob='true')
 
 @rt('/')
 def get():
@@ -42,29 +47,25 @@ def get():
             Input(type='text', id='url', placeholder='url'),
             Select(Option("html2text", value="h2t", selected=True),
                 Option("trafilatura", value="traf"),
-                id="extractor", hx_on_change="htmx.trigger('#editor', 'change')"),
+                id="extractor", hx_on_change="upd_editor()"),
         Button('Load')),
-        Hidden(id='hid_code', hx_on__after_swap='console.log(this); upd_editor(this)'),
-        hx_post='/load', hx_target='#hid_code', hx_swap='textContent')
-    trigger = "load delay:100ms, change delay:200ms"
+        hx_post='/load', hx_swap='none')
     return Titled('web2md', frm, 
         A('Go to markdown', href='#details'),
-        Textarea(samp, id='editor', hx_post='/',  hx_trigger=trigger, hx_target='#details', hx_include="#extractor"),
-        Script(js), Div(id='details'))
+        Div(id='editor'), Script(js), Div(id='details'), set_cm(samp))
 
 @rt('/load')
-def post(url:str):
+def post(sess, url:str):
+    if not url: return add_toast(sess, "Please enter a valid URL", "warning")
     body = lxml.html.fromstring(httpx.get(url).text).xpath('//body')[0]
     body = Cleaner(javascript=True, style=True).clean_html(body)
-    return ''.join(lxml.html.tostring(c, encoding='unicode') for c in body)
+    return set_cm(''.join(lxml.html.tostring(c, encoding='unicode') for c in body))
 
-@rt('/')
-def post(editor: str, extractor:str):
+def get_md(editor, extractor):
     if extractor=='traf':
         if '<article>' not in editor.lower(): editor = f'<article>{editor}</article>'
-        editor = f'<html><body>{editor}</body></html>'
-        res = extract(editor, output_format='markdown', favor_recall=True, include_tables=True,
-                      include_links=False, include_images=False, include_comments=True)
+        res = extract(f'<html><body>{editor}</body></html>', output_format='markdown',
+            favor_recall=True, include_tables=True, include_links=False, include_images=False, include_comments=True)
     else:
         h2t = HTML2Text(bodywidth=5000)
         h2t.ignore_links = True
@@ -72,7 +73,12 @@ def post(editor: str, extractor:str):
         h2t.ignore_images = True
         res = h2t.handle(editor)
     def _f(m): return f'```\n{dedent(m.group(1))}\n```'
-    res = re.sub(r'\[code]\s*\n(.*?)\n\[/code]', _f, res or '', flags=re.DOTALL)
-    return Pre(Code(res.strip(), lang='markdown'))
+    return re.sub(r'\[code]\s*\n(.*?)\n\[/code]', _f, res or '', flags=re.DOTALL).strip()
+
+@rt('/')
+def post(editor: str, extractor:str): return Pre(Code(get_md(editor, extractor), lang='markdown'))
+
+@rt('/api')
+def post(editor: str, extractor:str='h2t'): return get_md(editor, extractor)
 
 run_uv()
