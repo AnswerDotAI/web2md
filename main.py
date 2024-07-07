@@ -20,39 +20,35 @@ hdrs = (
     Style('''.CodeMirror { height: auto; min-height: 100px; border: 1px solid #ddd; }
         pre { white-space: pre-wrap; }
         select { width: auto; min-width: max-content; padding-right: 2em; }'''),
-    HighlightJS(langs=['markdown'])
+    HighlightJS(langs=['markdown']),
+    Style('''* { box-sizing: border-box; }
+		html, body { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+		body { font-family: system-ui, sans-serif; perspective: 1500px; background: linear-gradient(#666, #222); }'''),
 )
-app = fast_app(hdrs=hdrs)
+app = FastHTML(hdrs=hdrs)
 rt = app.route
 
 setup_toasts(app)
 
-js = '''
-let cm = CodeMirror(me("#editor"), {
-    mode: "htmlmixed", foldGutter: true, gutters: ["CodeMirror-foldgutter"]
-})
-function upd_editor() {
-    htmx.ajax('POST', '/', {
-        target:'#details', values: {editor: cm.getValue(), extractor: me("#extractor").value}
-    });
-}
-cm.on("change", upd_editor);'''
+js = '''let ed = me("#editor");
+let cm = CodeMirror(ed, { mode: "htmlmixed", foldGutter: true, gutters: ["CodeMirror-foldgutter"] });
+cm.on("change", _ => ed.send("edited"));'''
 
-def set_cm(s): return Script(f"cm.setValue({dumps(s)});", id='set_cm', hx_swap_oob='true')
+def set_cm(s): return run_js('cm.setValue({s});', s=s)
 
 @rt('/')
 def get():
     samp = Path('samp.html').read_text()
-    frm = Form(Group(
-            Input(type='text', id='url', placeholder='url'),
+    ed_kw = dict(hx_post='/', target_id='details', hx_vals='js:{cts: cm.getValue()}')
+    grp = Group(
+            Input(type='text', id='url', value='https://example.org/'),
             Select(Option("html2text", value="h2t", selected=True),
                 Option("trafilatura", value="traf"),
-                id="extractor", hx_on_change="upd_editor()"),
-        Button('Load')),
-        hx_post='/load', hx_swap='none')
-    return Titled('web2md', frm, 
-        A('Go to markdown', href='#details'),
-        Div(id='editor'), Script(js), Div(id='details'), set_cm(samp))
+                id="extractor", **ed_kw),
+            Button('Load', hx_swap='none', hx_post='/load'))
+    frm = Form(grp, A('Go to markdown', href='#details'),
+        Div(id='editor', **ed_kw, hx_trigger='edited delay:300ms, load delay:100ms'))
+    return Titled('web2md', frm, Script(js), Div(id='details'), set_cm(samp))
 
 @rt('/load')
 def post(sess, url:str):
@@ -61,24 +57,24 @@ def post(sess, url:str):
     body = Cleaner(javascript=True, style=True).clean_html(body)
     return set_cm(''.join(lxml.html.tostring(c, encoding='unicode') for c in body))
 
-def get_md(editor, extractor):
+def get_md(cts, extractor):
     if extractor=='traf':
-        if '<article>' not in editor.lower(): editor = f'<article>{editor}</article>'
-        res = extract(f'<html><body>{editor}</body></html>', output_format='markdown',
+        if '<article>' not in cts.lower(): cts = f'<article>{cts}</article>'
+        res = extract(f'<html><body>{cts}</body></html>', output_format='markdown',
             favor_recall=True, include_tables=True, include_links=False, include_images=False, include_comments=True)
     else:
         h2t = HTML2Text(bodywidth=5000)
         h2t.ignore_links = True
         h2t.mark_code = True
         h2t.ignore_images = True
-        res = h2t.handle(editor)
+        res = h2t.handle(cts)
     def _f(m): return f'```\n{dedent(m.group(1))}\n```'
     return re.sub(r'\[code]\s*\n(.*?)\n\[/code]', _f, res or '', flags=re.DOTALL).strip()
 
 @rt('/')
-def post(editor: str, extractor:str): return Pre(Code(get_md(editor, extractor), lang='markdown'))
+def post(cts: str, extractor:str): return Pre(Code(get_md(cts, extractor), lang='markdown'))
 
 @rt('/api')
-def post(editor: str, extractor:str='h2t'): return get_md(editor, extractor)
+def post(cts: str, extractor:str='h2t'): return get_md(cts, extractor)
 
 run_uv()
