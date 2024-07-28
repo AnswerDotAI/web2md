@@ -21,12 +21,8 @@ hdrs = (
         pre { white-space: pre-wrap; }
         select { width: auto; min-width: max-content; padding-right: 2em; }'''),
     HighlightJS(langs=['markdown']),
-    Style('''* { box-sizing: border-box; }
-		html, body { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
-		body { font-family: system-ui, sans-serif; perspective: 1500px; background: linear-gradient(#666, #222); }'''),
 )
-app = FastHTML(hdrs=hdrs)
-rt = app.route
+app,rt = fast_app(hdrs=hdrs)
 
 setup_toasts(app)
 
@@ -77,4 +73,4 @@ def post(cts: str, extractor:str): return Pre(Code(get_md(cts, extractor), lang=
 @rt('/api')
 def post(cts: str, extractor:str='h2t'): return get_md(cts, extractor)
 
-run_uv()
+serve()
