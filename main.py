@@ -46,12 +46,15 @@ def get():
         Div(id='editor', **ed_kw, hx_trigger='edited delay:300ms, load delay:100ms'))
     return Titled('web2md', frm, Script(js), Div(id='details'), set_cm(samp))
 
+def get_body(url):
+    body = lxml.html.fromstring(httpx.get(url).text).xpath('//body')[0]
+    body = Cleaner(javascript=True, style=True).clean_html(body)
+    return ''.join(lxml.html.tostring(c, encoding='unicode') for c in body)
+
 @rt('/load')
 def post(sess, url:str):
     if not url: return add_toast(sess, "Please enter a valid URL", "warning")
-    body = lxml.html.fromstring(httpx.get(url).text).xpath('//body')[0]
-    body = Cleaner(javascript=True, style=True).clean_html(body)
-    return set_cm(''.join(lxml.html.tostring(c, encoding='unicode') for c in body))
+    return set_cm(get_body(url))
 
 def get_md(cts, extractor):
     if extractor=='traf':
@@ -71,6 +74,8 @@ def get_md(cts, extractor):
 def post(cts: str, extractor:str): return Pre(Code(get_md(cts, extractor), lang='markdown'))
 
 @rt('/api')
-def post(cts: str, extractor:str='h2t'): return get_md(cts, extractor)
+def post(cts: str='', url:str='', extractor:str='h2t'): 
+    if url: cts = get_body(url)
+    return get_md(cts, extractor)
 
 serve()
