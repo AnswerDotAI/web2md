@@ -6,6 +6,7 @@ from json import dumps,loads
 from trafilatura import html2txt, extract
 from lxml.html.clean import Cleaner
 import httpx, lxml
+import re
 
 cdn = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.1'
 hdrs = (
@@ -44,7 +45,10 @@ def get():
             Button('Load', hx_swap='none', hx_post='/load'))
     frm = Form(grp, A('Go to markdown', href='#details'),
         Div(id='editor', **ed_kw, hx_trigger='edited delay:300ms, load delay:100ms'))
-    return Titled('web2md', frm, Script(js), Div(id='details'), set_cm(samp))
+    gist_form = Form(Div(style='display: grid; grid-template-columns: 1fr auto; gap: 1em;')(
+            Input(type='text', id='github_token', placeholder='GitHub Token', style='grid-column: 1;'),
+            Button('Gist It', id='gist-button', style='grid-column: 2;', hx_post='/gistit', hx_vals='js:{cts: document.querySelector("#details pre code").textContent}')))
+    return Titled('web2md', frm, Script(js), Div(id='details'), set_cm(samp), gist_form)
 
 def get_body(url):
     body = lxml.html.fromstring(httpx.get(url).text).xpath('//body')[0]
@@ -74,8 +78,54 @@ def get_md(cts, extractor):
 def post(cts: str, extractor:str): return Pre(Code(get_md(cts, extractor), lang='markdown'))
 
 @rt('/api')
-def post(cts: str='', url:str='', extractor:str='h2t'): 
+def post(cts: str='', url:str='', extractor:str='h2t'):
     if url: cts = get_body(url)
     return get_md(cts, extractor)
+
+gist_js = '''
+function gistIt() {
+    let markdown = document.querySelector('#details pre code').textContent;
+
+    // Create a temporary textarea element
+    const tempTextArea = document.createElement('textarea');
+    tempTextArea.value = markdown;
+    document.body.appendChild(tempTextArea);
+
+    // Select and copy the text
+    tempTextArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempTextArea);
+
+    alert('Markdown copied to clipboard. You can now paste it into the Gist.');
+    window.open('https://gist.github.com/', '_blank');
+}
+gistIt(); // Run the function as soon as it's defined
+'''
+@rt('/gistit')
+def post(sess, cts:str, github_token:str = None):
+    if github_token: sess['github_token'] = github_token
+    github_token = sess.get('github_token', None)
+    # minimal front end automation if there is no token
+    if not github_token: return Script(gist_js)
+
+    # If we have a token, full automation
+
+    # Convert first heading to a filename
+    title = re.search(r'^(#{1,6})\s*(.+)', cts, re.MULTILINE)
+    if title: filename = f"{title.group(2).strip().lower().replace(' ', '_')}.md"
+    else: return add_toast(sess, "No valid heading found for the gist title", "warning")
+
+    # Prepare the gist payload
+    payload = {"description": "Gist created from web2md",
+                "public": True,
+                "files": {filename: {"content": cts}}}
+
+    headers = {"Authorization": f"token {github_token}",
+                "Accept": "application/vnd.github.v3+json"}
+
+    # Send the request to create the gist
+    response = httpx.post('https://api.github.com/gists', headers=headers, json=payload)
+    if response.status_code == 201: return Script(f'window.open("{response.json().get('html_url')}", "_blank");')
+    else: return add_toast(sess, response.json().get('message', 'Failed to create gist'), "error")
 
 serve()
