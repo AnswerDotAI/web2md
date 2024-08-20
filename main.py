@@ -45,9 +45,13 @@ def get():
             Button('Load', hx_swap='none', hx_post='/load'))
     frm = Form(grp, A('Go to markdown', href='#details'),
         Div(id='editor', **ed_kw, hx_trigger='edited delay:300ms, load delay:100ms'))
-    gist_form = Form(Div(style='display: grid; grid-template-columns: 1fr auto; gap: 1em;')(
-            Input(type='text', id='github_token', placeholder='GitHub Token', style='grid-column: 1;'),
-            Button('Gist It', id='gist-button', style='grid-column: 2;', hx_post='/gistit', hx_vals='js:{cts: document.querySelector("#details pre code").textContent}')))
+    gist_form = Form(
+        Div(style='display: grid; grid-template-columns: 1fr auto auto; gap: 1em; align-items: center;')(
+            Input(type='text', id='github_token', placeholder='GitHub Token', style='grid-column: 1; width: 100%;'),
+            Div(style='grid-column: 2; display: flex; align-items: center; gap: 0.5em;')(
+                CheckboxX(id='save_token', checked=True),
+                Label('Save Token', _for='save_token')),
+            Button('Gist It', id='gist-button', style='grid-column: 3;', hx_post='/gistit', hx_vals='js:{cts: document.querySelector("#details pre code").textContent, save_token: document.querySelector("#save_token").checked}')))
     return Titled('web2md', frm, Script(js), Div(id='details'), set_cm(samp), gist_form)
 
 def get_body(url):
@@ -102,14 +106,15 @@ function gistIt() {
 gistIt(); // Run the function as soon as it's defined
 '''
 @rt('/gistit')
-def post(sess, cts:str, github_token:str = None):
-    if github_token: sess['github_token'] = github_token
-    github_token = sess.get('github_token', None)
+def post(sess, cts:str, save_token:bool, github_token:str = None):
+    # Save token if provided and requested
+    if github_token and save_token: sess['github_token'] = github_token
+    # Get the token from the session if not provided
+    if not github_token: github_token = sess.get('github_token', None)
     # minimal front end automation if there is no token
     if not github_token: return Script(gist_js)
 
     # If we have a token, full automation
-
     # Convert first heading to a filename
     title = re.search(r'^(#{1,6})\s*(.+)', cts, re.MULTILINE)
     if title: filename = f"{title.group(2).strip().lower().replace(' ', '_')}.md"
@@ -125,7 +130,7 @@ def post(sess, cts:str, github_token:str = None):
 
     # Send the request to create the gist
     response = httpx.post('https://api.github.com/gists', headers=headers, json=payload)
-    if response.status_code == 201: return Script(f'window.open("{response.json().get('html_url')}", "_blank");')
+    if response.status_code == 201: return Script(f'''window.open("{response.json().get('html_url')}", "_blank");''')
     else: return add_toast(sess, response.json().get('message', 'Failed to create gist'), "error")
 
 serve()
