@@ -44,7 +44,9 @@ def get():
             Button('Load', hx_swap='none', hx_post='/load'))
     frm = Form(grp, A('Go to markdown', href='#details'),
         Div(id='editor', **ed_kw, hx_trigger='edited delay:300ms, load delay:100ms'))
-    return Titled('web2md', frm, Script(js), Div(id='details'), set_cm(samp))
+    gist_button = Button('Gist It', id='gist-button', onclick='gistIt()')
+    return Titled('web2md', frm, Script(js), Div(id='details'), set_cm(samp), gist_button, Script(gist_js))
+
 
 def get_body(url):
     body = lxml.html.fromstring(httpx.get(url).text).xpath('//body')[0]
@@ -74,8 +76,27 @@ def get_md(cts, extractor):
 def post(cts: str, extractor:str): return Pre(Code(get_md(cts, extractor), lang='markdown'))
 
 @rt('/api')
-def post(cts: str='', url:str='', extractor:str='h2t'): 
+def post(cts: str='', url:str='', extractor:str='h2t'):
     if url: cts = get_body(url)
     return get_md(cts, extractor)
+
+gist_js = '''
+function gistIt() {
+    let markdown = document.querySelector('#details pre code').textContent;
+
+    // Create a temporary textarea element
+    const tempTextArea = document.createElement('textarea');
+    tempTextArea.value = markdown;
+    document.body.appendChild(tempTextArea);
+
+    // Select and copy the text
+    tempTextArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(tempTextArea);
+
+    alert('Markdown copied to clipboard. You can now paste it into the Gist.');
+    window.open('https://gist.github.com/', '_blank');
+}
+'''
 
 serve()
