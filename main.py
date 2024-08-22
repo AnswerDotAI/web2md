@@ -116,12 +116,12 @@ def post(sess, cts:str, save_token:bool, github_token:str = None):
 
     # If we have a token, full automation
     # Convert first heading to a filename
-    title = re.search(r'^(#{1,6})\s*(.+)', cts, re.MULTILINE)
-    if title: filename = f"{title.group(2).strip().lower().replace(' ', '_')}.md"
+    title = re.search(r'^(#{1,6})\s*(.+)', cts, re.MULTILINE).group(2).strip()
+    if title: filename = f"{title.lower().replace(' ', '_')}.md"
     else: return add_toast(sess, "No valid heading found for the gist title", "warning")
 
     # Prepare the gist payload
-    payload = {"description": "Gist created from web2md",
+    payload = {"description": title,
                 "public": True,
                 "files": {filename: {"content": cts}}}
 
