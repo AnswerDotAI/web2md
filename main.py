@@ -103,7 +103,7 @@ function gistIt() {
     alert('Markdown copied to clipboard. You can now paste it into the Gist.');
     window.open('https://gist.github.com/', '_blank');
 }
-gistIt(); // Run the function as soon as it's defined
+gistIt();
 '''
 @rt('/gistit')
 def post(sess, cts:str, save_token:bool, github_token:str = None):
@@ -120,15 +120,9 @@ def post(sess, cts:str, save_token:bool, github_token:str = None):
     if title: filename = f"{title.lower().replace(' ', '_')}.md"
     else: return add_toast(sess, "No valid heading found for the gist title", "warning")
 
-    # Prepare the gist payload
-    payload = {"description": title,
-                "public": True,
-                "files": {filename: {"content": cts}}}
+    payload = {"description": title, "public": True, "files": {filename: {"content": cts}}}
+    headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
 
-    headers = {"Authorization": f"token {github_token}",
-                "Accept": "application/vnd.github.v3+json"}
-
-    # Send the request to create the gist
     response = httpx.post('https://api.github.com/gists', headers=headers, json=payload)
     if response.status_code == 201: return Script(f'''window.open("{response.json().get('html_url')}", "_blank");''')
     else: return add_toast(sess, response.json().get('message', 'Failed to create gist'), "error")
