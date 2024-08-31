@@ -134,3 +134,4 @@ def post(sess, cts:str, save_token:bool, github_token:str = None):
     else: return add_toast(sess, response.json().get('message', 'Failed to create gist'), "error")
 
 serve()
+
