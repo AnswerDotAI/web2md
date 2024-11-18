@@ -55,7 +55,7 @@ def get():
     return Titled('web2md', frm, Script(js), Div(id='details'), set_cm(samp), gist_form)
 
 def get_body(url):
-    body = lxml.html.fromstring(httpx.get(url).text).xpath('//body')[0]
+    body = lxml.html.fromstring(httpx.get(url, follow_redirects=True).text).xpath('//body')[0]
     body = Cleaner(javascript=True, style=True).clean_html(body)
     return ''.join(lxml.html.tostring(c, encoding='unicode') for c in body)
 
